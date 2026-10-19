@@ -1,8 +1,7 @@
 .venv/
 __pycache__/
-*.pyc 
+*.pyc
 .pytest_cache/
 .ruff_cache/
 certs/ 
 .DS_Store
-certs/
