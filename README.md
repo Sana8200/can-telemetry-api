@@ -1,5 +1,7 @@
 # CAN Telemetry API
 
+[![CI](https://github.com/Sana8200/can-telemetry-api/actions/workflows/ci.yml/badge.svg)](https://github.com/Sana8200/can-telemetry-api/actions/workflows/ci.yml)
+
 Decodes CAN bus frames into physical signals (rpm, °C, volts, amperes) in Python. It is the first part of a telemetry service for a Formula Student–style car: the next steps put the decoder behind a REST API served over HTTP/2 and TLS, then run it as a container on Kubernetes with CI/CD on GitHub Actions (see [Roadmap](#roadmap)).
 
 The message definitions below are invented for this project and do not describe a real car.
