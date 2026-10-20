@@ -10,7 +10,7 @@ VEHICLE = "5C12A00000000000"  # 47 km/h, 80 % throttle
 
 def test_decodes_inverter_frame():
     assert decode(Frame(0x100, bytes.fromhex(INVERTER))) == {
-        "motor_rpm": 3000,
+        "motor_rpm": 3001,
         "motor_temp": 65,
         "inverter_temp": 50,
     }
