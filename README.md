@@ -57,7 +57,7 @@ tests/
 ## Roadmap
 
 - [x] Decode CAN frames into physical signals, with tests
-- [ ] Lint and test every push with GitHub Actions
+- [x] Lint and test every push with GitHub Actions
 - [ ] REST API with FastAPI and a thread-safe store of the latest values
 - [ ] HTTP/2 over TLS with certificates from a private CA
 - [ ] Driving simulator and `candump -L` log upload
