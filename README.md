@@ -2,9 +2,8 @@
 
 [![CI](https://github.com/Sana8200/can-telemetry-api/actions/workflows/ci.yml/badge.svg)](https://github.com/Sana8200/can-telemetry-api/actions/workflows/ci.yml)
 
-Decodes CAN bus frames into physical signals (rpm, °C, volts, amperes) in Python. It is the first part of a telemetry service for a Formula Student–style car: the next steps put the decoder behind a REST API served over HTTP/2 and TLS, then run it as a container on Kubernetes with CI/CD on GitHub Actions (see [Roadmap](#roadmap)).
+Decodes CAN bus frames into physical signals (rpm, °C, volts, amperes) in Python. It is the first part of a telemetry service, the next steps put the decoder behind a REST API served over HTTP/2 and TLS, then run it as a container on Kubernetes with CI/CD on GitHub Actions (see [Roadmap](#roadmap)).
 
-The message definitions below are invented for this project and do not describe a real car.
 
 ## Example
 
@@ -16,18 +15,6 @@ The message definitions below are invented for this project and do not describe 
 {'pack_voltage': 330.1, 'pack_current': -12.5, 'state_of_charge': 87.5}
 ```
 
-An ID with no definition returns `None`, because a real bus carries many messages a service doesn't care about. A known ID with the wrong number of data bytes raises `FrameError`.
-
-## How decoding works
-
-Each signal is a bit field inside the frame's 8 data bytes, described by a start bit, a length, a scale, an offset and whether it is signed, as in a DBC file. All signals here are little-endian (Intel byte order).
-
-| Step | What happens | Example |
-|---|---|---|
-| 1. Bytes to one number | Read the bytes little-endian: byte 0 is the least significant | `B8 0B 69 5A 00 00 00 00` → `0x5A690BB8` |
-| 2. Cut out the signal | Shift right by the start bit, then mask to the length | motor_temp, start 16, length 8: `(0x5A690BB8 >> 16) & 0xFF` = `0x69` = 105 |
-| 3. Sign | Signed signals use two's complement: if the top bit is set, subtract 2^length | pack_current: `0xFF83` = 65411 → 65411 − 65536 = −125 |
-| 4. Scale and offset | physical = raw × scale + offset | 105 × 1 − 40 = 65 °C; −125 × 0.1 = −12.5 A |
 
 ## Signal definitions
 
