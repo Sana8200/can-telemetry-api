@@ -4,7 +4,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class Signal:
     name: str
-    start_bit: int  # little-endian: bit 0 is the lowest bit of byte 0
+    start_bit: int  # little-endian, bit 0 = lowest bit of byte 0
     length: int
     scale: float
     offset: float

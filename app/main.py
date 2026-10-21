@@ -1,4 +1,4 @@
-"""HTTP API: ingest CAN frames and serve the latest decoded signal values."""
+"""The REST API."""
 
 import dataclasses
 import math
@@ -12,9 +12,9 @@ from app.can_decode import Frame, FrameError, decode
 from app.signals import MESSAGES, SIGNALS
 from app.store import LatestValues, Reading
 
-MAX_CAN_ID = 0x1FFFFFFF  # 29-bit extended identifier
+MAX_CAN_ID = 0x1FFFFFFF  # 29-bit extended ID
 MAX_BATCH_FRAMES = 1000
-MAX_CLOCK_SKEW = 60.0  # seconds a frame's timestamp may be ahead of the server clock
+MAX_CLOCK_SKEW = 60.0  # how far ahead of our clock a timestamp can be, in seconds
 
 
 class FrameIn(BaseModel):
@@ -25,7 +25,7 @@ class FrameIn(BaseModel):
         examples=["B80B695A00000000"],
     )
     timestamp: float | None = Field(
-        default=None, description="Seconds since 1970; defaults to arrival time"
+        default=None, description="Unix time. If missing, the time it arrived is used"
     )
 
 
@@ -35,7 +35,7 @@ class FrameBatch(BaseModel):
 
 class IngestResult(BaseModel):
     decoded: int = Field(description="Frames decoded and stored")
-    ignored: int = Field(description="Frames with an ID this service has no definition for")
+    ignored: int = Field(description="Frames with an ID we don't know, skipped")
 
 
 class SignalDef(BaseModel):
@@ -75,20 +75,20 @@ def _signal_value(name: str, reading: Reading) -> SignalValue:
 
 
 def create_app() -> FastAPI:
-    """Build the app. Each call gives a fresh app, so every test starts clean."""
+    """New app with its own empty store, so tests don't share state."""
     app = FastAPI(title="CAN Telemetry API", version=__version__)
 
     store = LatestValues()
 
     def ingest(frames: list[Frame]) -> IngestResult:
-        # Check and decode every frame before storing any: one bad frame rejects the batch.
+        # decode the whole batch before storing anything, so one bad frame rejects all of it
         decoded: list[tuple[dict[str, float], float]] = []
         ignored = 0
         arrival = time.time()
         for index, frame in enumerate(frames):
             timestamp = frame.timestamp if frame.timestamp is not None else arrival
-            # NaN compares false with everything, so a NaN reading could never be replaced,
-            # and a timestamp far in the future would pin its value until that time.
+            # NaN would never get replaced (any comparison with NaN is False), and a timestamp
+            # far in the future would block newer values until that time
             if not (math.isfinite(timestamp) and 0 <= timestamp <= arrival + MAX_CLOCK_SKEW):
                 raise HTTPException(422, f"frame {index}: timestamp {timestamp} is out of range")
             try:
@@ -105,17 +105,17 @@ def create_app() -> FastAPI:
 
     @app.get("/healthz")
     def healthz() -> dict[str, str]:
-        """Liveness: the process is running and answering."""
+        """Liveness probe."""
         return {"status": "ok"}
 
     @app.get("/readyz")
     def readyz() -> dict[str, str]:
-        """Readiness: the service can take traffic."""
+        """Readiness probe."""
         return {"status": "ready"}
 
     @app.get("/messages")
     def list_messages() -> list[MessageDef]:
-        """The CAN messages and signals this service can decode."""
+        """Messages and signals the API knows how to decode."""
         return [
             MessageDef(
                 id=m.can_id,
@@ -128,12 +128,12 @@ def create_app() -> FastAPI:
 
     @app.post("/frames")
     def post_frames(batch: FrameBatch) -> IngestResult:
-        """Ingest a batch of frames as JSON."""
+        """Post a batch of frames as JSON."""
         return ingest([Frame(f.id, bytes.fromhex(f.data), f.timestamp) for f in batch.frames])
 
     @app.get("/signals")
     def list_signals() -> list[SignalValue]:
-        """Latest value of every signal received so far."""
+        """Latest value of every signal seen so far."""
         return [_signal_value(name, r) for name, r in sorted(store.snapshot().items())]
 
     @app.get("/signals/{name}")

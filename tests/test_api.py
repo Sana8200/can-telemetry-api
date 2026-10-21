@@ -72,7 +72,7 @@ def test_older_frame_does_not_overwrite_newer(client):
 
 @pytest.mark.parametrize("timestamp", ["NaN", "Infinity", "-1", "1e12"])
 def test_bad_timestamps_are_rejected(client, timestamp):
-    # Raw JSON text: NaN and Infinity can't be written with json=, and Python's parser accepts them
+    # json= refuses NaN/Infinity but the server's parser accepts them, so send raw text
     body = '{"frames": [{"id": 256, "data": "B80B695A00000000", "timestamp": TS}]}'
     body = body.replace("TS", timestamp)
     response = client.post("/frames", content=body, headers={"Content-Type": "application/json"})

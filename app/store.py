@@ -7,18 +7,18 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class Reading:
     value: float
-    timestamp: float  # seconds since 1970
+    timestamp: float  # unix time
 
 
 class LatestValues:
-    """Keeps the newest reading per signal, safe to use from several threads."""
+    """Latest reading of each signal. Thread-safe."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._readings: dict[str, Reading] = {}
 
     def update(self, values: dict[str, float], timestamp: float) -> None:
-        """Store each value, unless the stored reading is newer."""
+        """Save the values, but never replace a newer reading with an older one."""
         with self._lock:
             for name, value in values.items():
                 current = self._readings.get(name)
@@ -26,11 +26,11 @@ class LatestValues:
                     self._readings[name] = Reading(value, timestamp)
 
     def get(self, name: str) -> Reading | None:
-        """The latest reading of one signal, or None if nothing has arrived."""
+        """None if nothing has come in for this signal yet."""
         with self._lock:
             return self._readings.get(name)
 
     def snapshot(self) -> dict[str, Reading]:
-        """A copy of all latest readings."""
+        """Copy of all readings, so the caller can loop over it without the lock."""
         with self._lock:
             return dict(self._readings)
