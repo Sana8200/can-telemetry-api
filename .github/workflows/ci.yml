@@ -27,3 +27,23 @@ jobs:
       - run: ruff check .
       - run: ruff format --check .
       - run: pytest
+
+  container:
+    name: Build image and smoke test
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: docker build -t can-telemetry-api:ci .
+      - run: docker run -d --name api -p 8080:8080 can-telemetry-api:ci
+      - name: Smoke test
+        run: |
+          curl -fsS --retry 30 --retry-delay 1 --retry-all-errors http://localhost:8080/healthz
+          curl -fsS -H "Content-Type: application/json" \
+            -d '{"frames": [{"id": 256, "data": "B80B695A00000000"}]}' \
+            http://localhost:8080/frames
+          curl -fsS http://localhost:8080/signals/motor_rpm | grep '"value":3000.0'
+          test "$(docker exec api id -u)" = 10001
+      - name: Container logs
+        if: failure()
+        run: docker logs api

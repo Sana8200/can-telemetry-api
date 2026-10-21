@@ -1,0 +1,11 @@
+.git/
+.github/
+.venv/
+tests/
+*.md
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+.ruff_cache/
+**/.DS_Store
+certs/
