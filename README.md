@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Sana8200/can-telemetry-api/actions/workflows/ci.yml/badge.svg)](https://github.com/Sana8200/can-telemetry-api/actions/workflows/ci.yml)
 
-Decodes CAN bus frames into real values (rpm, °C, volts, amps) and serves the latest value of each signal over a REST API. It runs over HTTPS with HTTP/2, using certs from a private CA, in a small non-root container. CI lints and tests every push, then builds the image and smoke-tests it over HTTPS.
+Decodes CAN bus frames into real values (rpm, °C, volts, amps) and serves the latest value of each signal over a REST API. It runs over HTTPS with HTTP/2, using certs from a private CA, in a small non-root container. CI lints and tests every push, then builds the image and smoke-tests it over HTTPS, both in Docker and on a kind cluster.
 
 The CAN messages are made up for this project, they're not from a real car.
 
@@ -39,7 +39,7 @@ You should get something like:
 
 ## TLS
 
-`scripts/make-certs.sh` makes a private CA and a server cert signed by it. The cert covers `localhost` and the Kubernetes service names, so the same one will work in the cluster later. Clients just need to trust `ca.crt`. HTTP/2 is negotiated during the TLS handshake (ALPN).
+`scripts/make-certs.sh` makes a private CA and a server cert signed by it. The cert covers `localhost` and the Kubernetes service names, so the same one works in the cluster too. Clients just need to trust `ca.crt`. HTTP/2 is negotiated during the TLS handshake (ALPN).
 
 The keys aren't in git or in the image, the container gets them from a read-only mount.
 
@@ -93,6 +93,27 @@ To run it with TLS without Docker:
 TLS_CERT_FILE=certs/server.crt TLS_KEY_FILE=certs/server.key python -m app
 ```
 
+## Kubernetes
+
+Runs on a local [kind](https://kind.sigs.k8s.io/) cluster. Need kind and kubectl.
+
+```bash
+kind create cluster --name can-telemetry
+bash scripts/make-certs.sh
+docker build -t can-telemetry-api:dev .
+kind load docker-image can-telemetry-api:dev --name can-telemetry
+kubectl create secret tls can-telemetry-tls --cert=certs/server.crt --key=certs/server.key
+kubectl apply -f k8s/
+kubectl rollout status deployment/can-telemetry
+kubectl port-forward service/can-telemetry 8443:443
+```
+
+Then `bash scripts/smoke-test.sh` from another terminal.
+
+The pod runs as uid 10001 with a read-only filesystem, no Linux capabilities and no service account token. The cert and key come from a Secret, mounted read-only with mode 0440. Readiness and liveness probes hit `/readyz` and `/healthz` over HTTPS. There's one replica on purpose, since the latest values live in memory.
+
+`kind delete cluster --name can-telemetry` removes the cluster.
+
 ## Layout
 
 ```
@@ -106,6 +127,9 @@ tests/
 scripts/
   make-certs.sh       dev CA + server cert
   smoke-test.sh       checks a running server
+k8s/
+  deployment.yaml
+  service.yaml
 Dockerfile
 .github/workflows/ci.yml
 ```
@@ -117,6 +141,6 @@ Dockerfile
 - [x] REST API with FastAPI and a thread-safe store of the latest values
 - [x] Slim, non-root container image, built and smoke-tested in CI
 - [x] HTTP/2 over TLS with certificates from a private CA
-- [ ] Deployment to Kubernetes (kind) with a locked-down pod
+- [x] Deployment to Kubernetes (kind) with a locked-down pod
 - [ ] Image published to GitHub Container Registry
 - [ ] Driving simulator and `candump -L` log upload
