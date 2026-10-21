@@ -58,7 +58,7 @@ tests/
 
 - [x] Decode CAN frames into physical signals, with tests
 - [x] Lint and test every push with GitHub Actions
-- [ ] REST API with FastAPI and a thread-safe store of the latest values
+- [x] REST API with FastAPI and a thread-safe store of the latest values
 - [ ] HTTP/2 over TLS with certificates from a private CA
 - [ ] Driving simulator and `candump -L` log upload
 - [ ] Slim, non-root container image
