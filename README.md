@@ -2,24 +2,30 @@
 
 [![CI](https://github.com/Sana8200/can-telemetry-api/actions/workflows/ci.yml/badge.svg)](https://github.com/Sana8200/can-telemetry-api/actions/workflows/ci.yml)
 
-A Python service that decodes CAN bus frames into physical signals (rpm, °C, volts, amperes) and serves the latest value of each signal over a REST API. It runs in a slim container as a non-root user. GitHub Actions lints and tests every push, then builds the image and smoke-tests the running container.
+A Python service that decodes CAN bus frames into physical signals (rpm, °C, volts, amperes) and serves the latest value of each signal over a REST API. It speaks HTTP/2 over TLS, with certificates from a private certificate authority, and runs in a slim container as a non-root user. GitHub Actions lints and tests every push, then builds the image and smoke-tests the running container over HTTPS.
 
 The message definitions are invented for this project and do not describe a real car.
 
 ## Run it
 
+Needs Docker and OpenSSL 3.
+
 ```bash
+bash scripts/make-certs.sh
 docker build -t can-telemetry-api .
-docker run --rm -p 8080:8080 can-telemetry-api
+docker run --rm -p 8443:8443 --user "$(id -u):$(id -g)" \
+  -v "$PWD/certs:/certs:ro" \
+  -e TLS_CERT_FILE=/certs/server.crt -e TLS_KEY_FILE=/certs/server.key \
+  can-telemetry-api
 ```
 
 In another terminal, send a frame and read a signal back:
 
 ```bash
-curl -X POST http://localhost:8080/frames \
+curl --cacert certs/ca.crt -X POST https://localhost:8443/frames \
   -H "Content-Type: application/json" \
   -d '{"frames": [{"id": 256, "data": "B80B695A00000000"}]}'
-curl http://localhost:8080/signals/motor_rpm
+curl --cacert certs/ca.crt https://localhost:8443/signals/motor_rpm
 ```
 
 ```json
@@ -27,7 +33,11 @@ curl http://localhost:8080/signals/motor_rpm
 {"name":"motor_rpm","message":"inverter","value":3000.0,"unit":"rpm","timestamp":1792589865.4}
 ```
 
-Interactive API docs are at http://localhost:8080/docs.
+`bash scripts/smoke-test.sh` runs the same checks as CI: HTTP/2, the certificate, and a frame read back.
+
+## TLS
+
+`scripts/make-certs.sh` creates a private CA (`ca.crt`) and a server certificate signed by it, valid for `localhost` and the names of a Kubernetes Service. Clients trust the server by trusting `ca.crt`, and the server offers HTTP/2 during the TLS handshake (ALPN). The keys stay out of git and out of the image: the container gets them through a read-only mount.
 
 ## API
 
@@ -71,7 +81,13 @@ ruff check .
 hypercorn app.main:app --reload
 ```
 
-`pytest` runs the tests, `ruff check .` lints the code, and the last command starts a development server on http://localhost:8000 that restarts when the code changes.
+`pytest` runs the tests, `ruff check .` lints the code, and the last command starts a development server on http://localhost:8000 that restarts when the code changes. Its interactive API docs are at http://localhost:8000/docs.
+
+To run the real server with TLS outside Docker:
+
+```bash
+TLS_CERT_FILE=certs/server.crt TLS_KEY_FILE=certs/server.key python -m app
+```
 
 ## Project layout
 
@@ -81,12 +97,17 @@ app/
   can_decode.py       Frame, extract_raw() and decode()
   store.py            thread-safe store of the latest values
   main.py             REST API (FastAPI)
+  __main__.py         python -m app: HTTPS with HTTP/2, clean shutdown on SIGTERM
 tests/
   test_decode.py      decoder tests
   test_api.py         API tests
+  test_server_config.py
+scripts/
+  make-certs.sh       private CA and server certificate
+  smoke-test.sh       checks a running server: TLS, HTTP/2, ingest, read back
 Dockerfile            slim image that runs as uid 10001
 .github/workflows/
-  ci.yml              lint and test, then build the image and smoke-test it
+  ci.yml              lint and test, then build the image and smoke-test it over HTTPS
 ```
 
 ## Roadmap
@@ -95,7 +116,7 @@ Dockerfile            slim image that runs as uid 10001
 - [x] Lint and test every push with GitHub Actions
 - [x] REST API with FastAPI and a thread-safe store of the latest values
 - [x] Slim, non-root container image, built and smoke-tested in CI
-- [ ] HTTP/2 over TLS with certificates from a private CA
-- [ ] Driving simulator and `candump -L` log upload
+- [x] HTTP/2 over TLS with certificates from a private CA
 - [ ] Deployment to Kubernetes (kind) with a locked-down pod
 - [ ] Image published to GitHub Container Registry
+- [ ] Driving simulator and `candump -L` log upload
