@@ -2,7 +2,7 @@
 name = "can-telemetry-api"
 version = "0.1.0"
 requires-python = ">=3.12"
-description = "Decodes CAN frames and serves the latest signal values over HTTP/2 and TLS"
+description = "Decodes CAN frames and serves the latest signal values over a REST API"
 
 
 [tool.pytest.ini_options]
