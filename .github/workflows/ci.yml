@@ -48,3 +48,31 @@ jobs:
       - name: Container logs
         if: failure()
         run: docker logs api
+
+  kubernetes:
+    name: Deploy to kind and smoke test
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: ci
+      - run: bash scripts/make-certs.sh certs
+      - run: docker build -t can-telemetry-api:dev .
+      - run: kind load docker-image can-telemetry-api:dev --name ci
+      - name: Deploy
+        run: |
+          kubectl create secret tls can-telemetry-tls --cert=certs/server.crt --key=certs/server.key
+          kubectl apply -f k8s/
+          kubectl rollout status deployment/can-telemetry --timeout=120s
+      - name: Smoke test through the Service
+        run: |
+          kubectl port-forward service/can-telemetry 8443:443 > port-forward.log 2>&1 &
+          bash scripts/smoke-test.sh https://localhost:8443 certs/ca.crt
+      - name: Pod status and logs
+        if: failure()
+        run: |
+          kubectl describe pods -l app.kubernetes.io/name=can-telemetry
+          kubectl logs -l app.kubernetes.io/name=can-telemetry --tail=100
+          cat port-forward.log || true

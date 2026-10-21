@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: can-telemetry
+  labels:
+    app.kubernetes.io/name: can-telemetry
+spec:
+  # keep this at 1, values are stored in memory so a second pod would have its own data
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: can-telemetry
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: can-telemetry
+    spec:
+      automountServiceAccountToken: false # doesn't need the k8s API
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001 # so the app can read the secret files, see defaultMode
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          image: can-telemetry-api:dev
+          imagePullPolicy: IfNotPresent # image comes from `kind load docker-image`, not a registry
+          ports:
+            - name: https
+              containerPort: 8443
+          env:
+            - name: TLS_CERT_FILE
+              value: /certs/tls.crt
+            - name: TLS_KEY_FILE
+              value: /certs/tls.key
+          volumeMounts:
+            - name: tls
+              mountPath: /certs
+              readOnly: true
+          readinessProbe: # gets no traffic from the Service while this fails
+            httpGet:
+              path: /readyz
+              port: https
+              scheme: HTTPS
+            periodSeconds: 5
+          livenessProbe: # container gets restarted after 3 fails in a row
+            httpGet:
+              path: /healthz
+              port: https
+              scheme: HTTPS
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: tls
+          secret:
+            secretName: can-telemetry-tls # made from certs/ with `kubectl create secret tls`
+            defaultMode: 0440 # read-only for owner + group
