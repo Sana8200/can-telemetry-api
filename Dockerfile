@@ -18,5 +18,6 @@ RUN pip install --no-cache-dir --disable-pip-version-check -r requirements.txt
 COPY app/ app/
 
 USER 10001:10001
-EXPOSE 8080
-CMD ["hypercorn", "app.main:app", "--bind", "0.0.0.0:8080"]
+# HTTPS when TLS_CERT_FILE and TLS_KEY_FILE are set (plain HTTP on 8080 without them)
+EXPOSE 8443
+CMD ["python", "-m", "app"]
