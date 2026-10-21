@@ -76,3 +76,26 @@ jobs:
           kubectl describe pods -l app.kubernetes.io/name=can-telemetry
           kubectl logs -l app.kubernetes.io/name=can-telemetry --tail=100
           cat port-forward.log || true
+
+  publish:
+    name: Publish image to GitHub Container Registry
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [container, kubernetes]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"
+          docker build \
+            --label "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            -t "$image:${GITHUB_SHA::7}" -t "$image:latest" .
+          docker push --all-tags "$image"
