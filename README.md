@@ -6,6 +6,26 @@ Decodes CAN bus frames into real values (rpm, °C, volts, amps) and serves the l
 
 The CAN messages are made up for this project, they're not from a real car.
 
+## How it fits together
+
+```mermaid
+flowchart LR
+    client["curl or smoke-test.sh"]
+    subgraph cluster["Kubernetes cluster (kind)"]
+        svc["Service can-telemetry :443"]
+        secret[/"Secret can-telemetry-tls"/]
+        subgraph pod["Pod: uid 10001, read-only filesystem"]
+            api["FastAPI on Hypercorn<br/>HTTP/2 + TLS, port 8443"]
+            dec["decoder"]
+            store[("latest values<br/>in memory")]
+        end
+    end
+    client -- "POST /frames<br/>GET /signals" --> svc
+    svc --> api
+    secret -.->|mounted at /certs| api
+    api --> dec --> store
+```
+
 ## Running it
 
 Need Docker and OpenSSL.
@@ -114,6 +134,25 @@ The pod runs as uid 10001 with a read-only filesystem, no Linux capabilities and
 
 `kind delete cluster --name can-telemetry` removes the cluster.
 
+## CI/CD
+
+```mermaid
+flowchart LR
+    push["push to main"] --> test["Lint and test<br/>ruff, pytest"]
+    test --> container["Docker<br/>build and smoke test"]
+    test --> kind["Kubernetes (kind)<br/>deploy and smoke test"]
+    container --> publish["Publish to ghcr.io"]
+    kind --> publish
+```
+
+Every push to main runs this pipeline. The image is published only if both smoke tests pass, tagged with the short commit SHA and `latest`:
+
+```bash
+docker pull ghcr.io/sana8200/can-telemetry-api:latest
+```
+
+It's built for amd64, so on Apple silicon add `--platform linux/amd64`.
+
 ## Layout
 
 ```
@@ -134,6 +173,22 @@ Dockerfile
 .github/workflows/ci.yml
 ```
 
+## Design notes
+
+- **HTTP/2 over TLS.** The server offers `h2` during the TLS handshake (ALPN), with a certificate from a private CA.
+- **Newest timestamp wins.** A late or out-of-order frame never overwrites a newer value.
+- **All-or-nothing batches.** Every frame is checked and decoded before anything is stored, so one bad frame rejects the whole batch.
+- **Timestamp range check.** Timestamps must be finite, not negative, and at most 60 s in the future. A NaN or far-future timestamp would otherwise block newer values.
+- **Graceful shutdown.** On SIGTERM, which Kubernetes sends before stopping a pod, the server lets open requests finish and exits.
+- **Keys never in git or the image.** They're mounted when the container starts: a read-only volume in Docker, a Secret in Kubernetes.
+
+## Limitations
+
+- The latest values live in memory: one replica, and a restart loses them. Scaling out would need a shared store such as Redis.
+- Classic CAN only (up to 8 data bytes) and little-endian signals. No CAN FD or big-endian (Motorola) signals.
+- No authentication yet. Mutual TLS, with client certificates from the same CA, would fit.
+- No metrics yet.
+
 ## Roadmap
 
 - [x] Decode CAN frames into physical signals, with tests
@@ -142,5 +197,5 @@ Dockerfile
 - [x] Slim, non-root container image, built and smoke-tested in CI
 - [x] HTTP/2 over TLS with certificates from a private CA
 - [x] Deployment to Kubernetes (kind) with a locked-down pod
-- [ ] Image published to GitHub Container Registry
+- [x] Image published to GitHub Container Registry
 - [ ] Driving simulator and `candump -L` log upload
