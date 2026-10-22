@@ -1,3 +1,5 @@
+"""The CAN messages and signals the decoder knows about."""
+
 from dataclasses import dataclass
 
 

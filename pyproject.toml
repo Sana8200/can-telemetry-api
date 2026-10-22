@@ -4,7 +4,6 @@ version = "0.1.0"
 requires-python = ">=3.12"
 description = "Decodes CAN frames and serves the latest signal values over a REST API"
 
-
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
@@ -14,10 +13,8 @@ addopts = "-q"
 line-length = 100
 target-version = "py312"
 
-
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "B", "UP", "S"]
-
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S101"]
